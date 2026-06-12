@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Iterable
 
-from agentic_rag.types import PatientRecord, SearchResult
+from agentic_rag.types import DocumentChunk, SearchResult
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
 
@@ -23,7 +23,7 @@ def tokenize(text: str) -> list[str]:
 class LexicalRetriever:
     """Small BM25-like retriever without external dependencies."""
 
-    def __init__(self, records: Iterable[PatientRecord]):
+    def __init__(self, records: Iterable[DocumentChunk]):
         self.records = list(records)
         self._term_counts = [Counter(tokenize(record.text)) for record in self.records]
         self._doc_freq = Counter()
@@ -44,7 +44,7 @@ class LexicalRetriever:
         for raw_chunk in raw_chunks:
             record_id, text = raw_chunk.split(":", 1)
             records.append(
-                PatientRecord(
+                DocumentChunk(
                     record_id=record_id.strip(),
                     source=source or path.parent.name,
                     text=text.strip(),

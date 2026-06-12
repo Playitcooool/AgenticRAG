@@ -1,4 +1,4 @@
-"""Shared domain types for the agentic RAG pipeline."""
+"""Shared types for the agentic RAG pipeline."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ class ContextStatus(str, Enum):
 
 
 @dataclass(frozen=True)
-class PatientRecord:
-    """A source document chunk from a patient record."""
+class DocumentChunk:
+    """A source document chunk."""
 
     record_id: str
     source: str
@@ -27,13 +27,13 @@ class SearchResult:
     """A retrieved snippet with score and provenance."""
 
     query: str
-    record: PatientRecord
+    record: DocumentChunk
     score: float
 
 
 @dataclass(frozen=True)
-class ClinicalTask:
-    """A clinical information need extracted from the doctor request."""
+class RetrievalTask:
+    """An information need extracted from the user request."""
 
     name: str
     description: str
@@ -58,7 +58,7 @@ class PipelineTrace:
     """Inspectable trace for the full five-phase workflow."""
 
     request: str
-    tasks: list[ClinicalTask]
+    tasks: list[RetrievalTask]
     queries_by_round: list[list[str]]
     retrieved_by_round: list[list[SearchResult]]
     drafts: list[str]

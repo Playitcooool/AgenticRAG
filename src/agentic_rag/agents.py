@@ -3,69 +3,62 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 
-from agentic_rag.types import ClinicalTask, ContextAssessment, ContextStatus, SearchResult
+from agentic_rag.types import ContextAssessment, ContextStatus, RetrievalTask, SearchResult
+
+
+WORD_RE = re.compile(r"[a-zA-Z0-9]+")
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "for",
+    "from",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "patient",
+    "please",
+    "request",
+    "show",
+    "summarize",
+    "summary",
+    "tell",
+    "the",
+    "this",
+    "to",
+    "with",
+}
 
 
 class RootAgent:
-    """Parse a doctor's request and delegate clinical work areas."""
+    """Parse a request into generic information needs."""
 
-    def parse(self, request: str) -> list[ClinicalTask]:
-        request_lower = request.lower()
-        tasks = []
-        if any(term in request_lower for term in ("med", "drug", "pharmacy")):
-            tasks.append(
-                ClinicalTask(
-                    name="pharmacy",
-                    description="Current and discharge medications",
-                    required_terms=("medication", "medications", "drug", "pharmacy", "lisinopril", "metformin"),
-                    search_hints=("discharge medications", "pharmacy reconciliation", "medication list"),
-                )
-            )
-        if any(term in request_lower for term in ("diet", "nutrition", "sodium", "food")):
-            tasks.append(
-                ClinicalTask(
-                    name="nutrition",
-                    description="Diet and nutrition instructions",
-                    required_terms=("diet", "nutrition", "sodium", "fluid", "meal"),
-                    search_hints=("nutrition notes", "diet instructions", "low sodium diet"),
-                )
-            )
-        if any(term in request_lower for term in ("allerg", "reaction", "rash", "adverse")):
-            tasks.append(
-                ClinicalTask(
-                    name="allergies",
-                    description="Allergies, reactions, or adverse events",
-                    required_terms=("allergy", "allergies", "rash", "reaction", "adverse"),
-                    search_hints=("allergy history", "adverse reaction", "rash during stay"),
-                )
-            )
-        if not tasks:
-            tasks.append(
-                ClinicalTask(
-                    name="general",
-                    description="General clinical context",
-                    required_terms=tuple(request_lower.split()),
-                    search_hints=(request,),
-                )
-            )
-        return tasks
+    def parse(self, request: str) -> list[RetrievalTask]:
+        clauses = _extract_task_clauses(request)
+        return [_task_from_clause(index, clause) for index, clause in enumerate(clauses, start=1)]
 
 
 class PlannerAgent:
     """Declare the work areas to inspect."""
 
-    def plan(self, tasks: list[ClinicalTask]) -> list[ClinicalTask]:
+    def plan(self, tasks: list[RetrievalTask]) -> list[RetrievalTask]:
         return tasks
 
 
 class QueryRewriter:
-    """Rewrite broad clinical tasks into retriever-friendly queries."""
+    """Rewrite broad tasks into retriever-friendly queries."""
 
-    def initial_queries(self, tasks: list[ClinicalTask]) -> list[str]:
+    def initial_queries(self, tasks: list[RetrievalTask]) -> list[str]:
         return [task.search_hints[0] for task in tasks]
 
-    def follow_up_queries(self, assessment: ContextAssessment, tasks: list[ClinicalTask]) -> list[str]:
+    def follow_up_queries(self, assessment: ContextAssessment, tasks: list[RetrievalTask]) -> list[str]:
         task_by_name = {task.name: task for task in tasks}
         queries = []
         for missing_task in assessment.missing_tasks:
@@ -88,7 +81,7 @@ class RAGAgent:
 class DraftAgent:
     """Create an intermediate rough answer for quality control."""
 
-    def draft(self, tasks: list[ClinicalTask], snippets: list[SearchResult]) -> str:
+    def draft(self, tasks: list[RetrievalTask], snippets: list[SearchResult]) -> str:
         grouped = _group_snippets_by_task(tasks, snippets)
         lines = []
         for task in tasks:
@@ -104,7 +97,7 @@ class DraftAgent:
 class SufficientContextAgent:
     """Inspect snippets, draft, and missing pieces before synthesis."""
 
-    def assess(self, request: str, tasks: list[ClinicalTask], snippets: list[SearchResult], draft: str) -> ContextAssessment:
+    def assess(self, request: str, tasks: list[RetrievalTask], snippets: list[SearchResult], draft: str) -> ContextAssessment:
         del request, draft
         grouped = _group_snippets_by_task(tasks, snippets)
         covered = [task.name for task in tasks if grouped.get(task.name)]
@@ -121,7 +114,7 @@ class SufficientContextAgent:
             return ContextAssessment(
                 status=ContextStatus.SUFFICIENT,
                 finding="; ".join(finding_parts),
-                gap="No missing clinical area detected.",
+                gap="No missing information need detected.",
                 covered_tasks=covered,
                 missing_tasks=[],
             )
@@ -130,12 +123,11 @@ class SufficientContextAgent:
         for task in tasks:
             if task.name in missing:
                 feedback.extend(task.search_hints)
-                if task.name == "allergies":
-                    feedback.extend(("rash", "adverse event", "allergic reaction", "new reaction during stay"))
+                feedback.extend(task.required_terms)
 
         return ContextAssessment(
             status=ContextStatus.INSUFFICIENT,
-            finding="; ".join(finding_parts) if finding_parts else "No required clinical area was grounded.",
+            finding="; ".join(finding_parts) if finding_parts else "No required information need was grounded.",
             gap="; ".join(gap_parts),
             feedback=list(dict.fromkeys(feedback)),
             covered_tasks=covered,
@@ -146,9 +138,9 @@ class SufficientContextAgent:
 class SynthesisAgent:
     """Write the final answer once context is sufficient."""
 
-    def synthesize(self, tasks: list[ClinicalTask], snippets: list[SearchResult], assessment: ContextAssessment) -> str:
+    def synthesize(self, tasks: list[RetrievalTask], snippets: list[SearchResult], assessment: ContextAssessment) -> str:
         grouped = _group_snippets_by_task(tasks, snippets)
-        lines = ["Clinical summary for the doctor:"]
+        lines = ["Grounded summary:"]
         for task in tasks:
             evidence = grouped.get(task.name, [])
             if not evidence:
@@ -163,7 +155,7 @@ class SynthesisAgent:
         return "\n".join(lines)
 
 
-def _group_snippets_by_task(tasks: list[ClinicalTask], snippets: list[SearchResult]) -> dict[str, list[SearchResult]]:
+def _group_snippets_by_task(tasks: list[RetrievalTask], snippets: list[SearchResult]) -> dict[str, list[SearchResult]]:
     grouped: dict[str, list[SearchResult]] = defaultdict(list)
     for result in snippets:
         text = result.record.text.lower()
@@ -172,6 +164,34 @@ def _group_snippets_by_task(tasks: list[ClinicalTask], snippets: list[SearchResu
             if any(term in text or term in query for term in task.required_terms):
                 grouped[task.name].append(result)
     return grouped
+
+
+def _extract_task_clauses(request: str) -> list[str]:
+    text = request.lower()
+    text = re.sub(r"\b(summarize|show|tell me|list|find|retrieve|answer|explain)\b", " ", text)
+    text = re.sub(r"\b(this|the|a|an)?\s*patient'?s?\b", " ", text)
+    text = re.sub(r"[?.!]", " ", text)
+    parts = [part.strip(" :;,-") for part in re.split(r",|\band\b", text)]
+    clauses = [part for part in parts if _content_terms(part)]
+    return clauses or [request.strip()]
+
+
+def _task_from_clause(index: int, clause: str) -> RetrievalTask:
+    description = " ".join(clause.split())
+    alternatives = [part.strip() for part in re.split(r"\bor\b|/", description) if _content_terms(part)]
+    primary = alternatives[0] if alternatives else description
+    required_terms = tuple(dict.fromkeys(term for phrase in [description, *alternatives] for term in _content_terms(phrase)))
+    search_hints = tuple(dict.fromkeys([primary, description, *alternatives, *required_terms]))
+    return RetrievalTask(
+        name=f"task_{index}",
+        description=description,
+        required_terms=required_terms or tuple(_content_terms(description)),
+        search_hints=search_hints or (description,),
+    )
+
+
+def _content_terms(text: str) -> list[str]:
+    return [term for term in WORD_RE.findall(text.lower()) if term not in STOPWORDS and len(term) > 1]
 
 
 def _shorten(text: str, limit: int = 180) -> str:
