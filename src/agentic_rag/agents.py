@@ -18,7 +18,7 @@ class RootAgent:
                 ClinicalTask(
                     name="pharmacy",
                     description="Current and discharge medications",
-                    required_terms=("medication", "medications", "drug", "dose", "mg"),
+                    required_terms=("medication", "medications", "drug", "pharmacy", "lisinopril", "metformin"),
                     search_hints=("discharge medications", "pharmacy reconciliation", "medication list"),
                 )
             )
