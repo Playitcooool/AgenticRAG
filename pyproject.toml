@@ -1,0 +1,23 @@
+[project]
+name = "agentic-rag"
+version = "0.1.0"
+description = "A compact implementation of an agentic RAG loop with sufficient-context checking."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "AgenticRAG Contributors" }]
+dependencies = []
+
+[project.scripts]
+agentic-rag-demo = "agentic_rag.demo:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentic_rag"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
