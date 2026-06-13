@@ -1,0 +1,6 @@
+llm:
+  base_url: "http://localhost:1234"
+  model: "unsloth:gemma-4-E4B-it-UD-MLX-4bit"
+  api_key: "no_need"
+  timeout: 120
+  temperature: 0.0

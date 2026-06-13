@@ -58,16 +58,24 @@ Use a local OpenAI-compatible LLM for task decomposition, sufficient-context jud
 uv run agentic-rag-benchmark \
   --datasets medical \
   --limit 5 \
-  --backends lexical \
-  --llm-base-url http://localhost:1234
+  --backends lexical
 ```
 
-The default local API key is `no_need`; override it with `--llm-api-key` only if your server requires a different value.
+Model settings live in `config.yaml`:
 
-If your server exposes multiple models, pass one explicitly:
+```yaml
+llm:
+  base_url: "http://localhost:1234"
+  model: "unsloth:gemma-4-E4B-it-UD-MLX-4bit"
+  api_key: "no_need"
+  timeout: 120
+  temperature: 0.0
+```
+
+Use another config file or override individual values when needed:
 
 ```bash
-uv run agentic-rag-benchmark --llm-base-url http://localhost:1234 --llm-model your-model-id
+uv run agentic-rag-benchmark --config config.yaml --llm-model another-model-id
 ```
 
 ## Repository Layout

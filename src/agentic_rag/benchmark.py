@@ -9,6 +9,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from agentic_rag.config import load_config
 from agentic_rag.embeddings import HashingEmbedder
 from agentic_rag.llm import LLMClientError, OpenAICompatibleClient
 from agentic_rag.llm_agents import build_llm_agents
@@ -34,7 +35,8 @@ class BenchmarkRow:
 
 def main() -> None:
     args = _parse_args()
-    llm_client = _build_llm_client(args)
+    config = load_config(args.config)
+    llm_client = _build_llm_client(args, config)
     rows = []
     for dataset in args.datasets:
         dataset_path = args.data_dir / dataset
@@ -112,21 +114,30 @@ def _build_retriever(backend: str, records: list[DocumentChunk], dim: int, bit_w
     return VectorRetriever(records, embedder, index)
 
 
-def _build_llm_client(args: argparse.Namespace) -> OpenAICompatibleClient | None:
-    if not args.llm_base_url:
+def _build_llm_client(args: argparse.Namespace, config: dict) -> OpenAICompatibleClient | None:
+    llm_config = config.get("llm", {}) if isinstance(config.get("llm", {}), dict) else {}
+    base_url = args.llm_base_url or llm_config.get("base_url")
+    model = args.llm_model or llm_config.get("model")
+    api_key = args.llm_api_key or llm_config.get("api_key") or "no_need"
+    timeout = args.llm_timeout if args.llm_timeout is not None else float(llm_config.get("timeout", 60.0))
+    temperature = (
+        args.llm_temperature if args.llm_temperature is not None else float(llm_config.get("temperature", 0.0))
+    )
+
+    if not base_url:
         return None
     client = OpenAICompatibleClient(
-        base_url=args.llm_base_url,
-        model=args.llm_model,
-        api_key=args.llm_api_key,
-        timeout=args.llm_timeout,
-        temperature=args.llm_temperature,
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        timeout=timeout,
+        temperature=temperature,
     )
     try:
         model = client.resolve_model()
     except LLMClientError as exc:
-        raise SystemExit(f"Could not initialize local LLM at {args.llm_base_url}: {exc}") from exc
-    print(f"# using local LLM: {args.llm_base_url} model={model}")
+        raise SystemExit(f"Could not initialize local LLM at {base_url}: {exc}") from exc
+    print(f"# using local LLM: {base_url} model={model}")
     return client
 
 
@@ -193,6 +204,7 @@ def _print_table(rows: list[BenchmarkRow]) -> None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--data-dir", type=Path, default=Path("datasets"))
     parser.add_argument("--datasets", nargs="+", default=["medical", "hotpotqa", "musique", "2wikimultihop", "novel"])
     parser.add_argument("--backends", nargs="+", default=["faiss-flat", "faiss-pq", "turbovec"])
@@ -202,11 +214,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dim", type=int, default=384)
     parser.add_argument("--bit-width", type=int, default=4, choices=[2, 4])
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--llm-base-url", default=None, help="OpenAI-compatible server base URL, e.g. http://localhost:1234")
-    parser.add_argument("--llm-model", default=None, help="Model id. Defaults to the first /v1/models result.")
-    parser.add_argument("--llm-api-key", default="no_need")
-    parser.add_argument("--llm-timeout", type=float, default=60.0)
-    parser.add_argument("--llm-temperature", type=float, default=0.0)
+    parser.add_argument("--llm-base-url", default=None, help="Override config llm.base_url.")
+    parser.add_argument("--llm-model", default=None, help="Override config llm.model.")
+    parser.add_argument("--llm-api-key", default=None, help="Override config llm.api_key.")
+    parser.add_argument("--llm-timeout", type=float, default=None, help="Override config llm.timeout.")
+    parser.add_argument("--llm-temperature", type=float, default=None, help="Override config llm.temperature.")
     return parser.parse_args()
 
 
