@@ -32,6 +32,18 @@ class EmbeddingCacheTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(1, embedder.calls)
 
+    def test_require_cached_rejects_missing_cache(self) -> None:
+        records = [DocumentChunk("1", "source", "alpha")]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FileNotFoundError):
+                load_or_compute_embeddings(
+                    records,
+                    CountingEmbedder(),
+                    {"provider": "test"},
+                    Path(directory),
+                    require_cached=True,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

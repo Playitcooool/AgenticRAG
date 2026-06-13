@@ -10,6 +10,8 @@ CONFIG="${CONFIG:-config.yaml}"
 EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER:-}"
 EMBEDDING_MODEL_PATH="${EMBEDDING_MODEL_PATH:-}"
 EMBEDDING_BATCH_SIZE="${EMBEDDING_BATCH_SIZE:-}"
+EMBEDDING_ONLY="${EMBEDDING_ONLY:-}"
+RAG_ONLY="${RAG_ONLY:-}"
 RESULTS_DIR="${RESULTS_DIR:-results}"
 RUN_NAME="${RUN_NAME:-faiss_vs_turbovec_llm_limit${LIMIT}}"
 OUTPUT_JSON="${OUTPUT_JSON:-${RESULTS_DIR}/${RUN_NAME}.json}"
@@ -69,6 +71,12 @@ if [[ -n "${EMBEDDING_MODEL_PATH}" ]]; then
 fi
 if [[ -n "${EMBEDDING_BATCH_SIZE}" ]]; then
   EXTRA_ARGS+=(--embedding-batch-size "${EMBEDDING_BATCH_SIZE}")
+fi
+if [[ -n "${EMBEDDING_ONLY}" ]]; then
+  EXTRA_ARGS+=(--embedding-only)
+fi
+if [[ -n "${RAG_ONLY}" ]]; then
+  EXTRA_ARGS+=(--rag-only)
 fi
 CMD=(
   "${BENCHMARK_BIN}"

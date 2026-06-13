@@ -34,19 +34,49 @@ class BenchmarkRow:
     error: str = ""
 
 
+@dataclass
+class PreparedEmbeddings:
+    embedder: object
+    dim: int
+    record_vectors: list[list[float]]
+
+
 def main() -> None:
     args = _parse_args()
     config = load_config(args.config)
-    llm_client = _build_llm_client(args, config)
+    llm_client = None if args.embedding_only else _build_llm_client(args, config)
     rows = []
-    _print_header()
+    if not args.embedding_only:
+        _print_header()
     for dataset in args.datasets:
         dataset_path = args.data_dir / dataset
         records = _load_records(dataset_path / "chunks.json", source=dataset)
         questions = _load_questions(dataset_path / "questions.json")[: args.limit]
+        vector_backends = [backend for backend in args.backends if _normalize_backend(backend) != "lexical"]
+        prepared_embeddings: PreparedEmbeddings | None = None
+        embedding_error: Exception | None = None
+        if vector_backends:
+            print(f"# embedding phase dataset={dataset} records={len(records)}", flush=True)
+            try:
+                prepared_embeddings = _prepare_embeddings(dataset, records, args, config)
+            except (BackendUnavailable, ImportError, ValueError, LLMClientError, FileNotFoundError) as exc:
+                embedding_error = exc
+                print(f"# embedding phase failed dataset={dataset}: {exc}", flush=True)
+        if args.embedding_only:
+            continue
+
         for backend in args.backends:
-            print(f"# starting dataset={dataset} backend={backend} questions={len(questions)}", flush=True)
-            row = _run_backend(dataset, backend, records, questions, args, config, llm_client)
+            print(f"# rag phase dataset={dataset} backend={backend} questions={len(questions)}", flush=True)
+            row = _run_backend(
+                dataset,
+                backend,
+                records,
+                questions,
+                args,
+                llm_client,
+                prepared_embeddings=prepared_embeddings,
+                embedding_error=embedding_error,
+            )
             rows.append(row)
             _print_row(row)
 
@@ -61,11 +91,12 @@ def _run_backend(
     records: list[DocumentChunk],
     questions: list[dict],
     args: argparse.Namespace,
-    config: dict,
     llm_client: OpenAICompatibleClient | None,
+    prepared_embeddings: PreparedEmbeddings | None,
+    embedding_error: Exception | None,
 ) -> BenchmarkRow:
     try:
-        retriever = _build_retriever(backend, records, args=args, config=config)
+        retriever = _build_retriever(backend, records, args=args, prepared_embeddings=prepared_embeddings, embedding_error=embedding_error)
     except (BackendUnavailable, ImportError, ValueError, LLMClientError, FileNotFoundError) as exc:
         return BenchmarkRow(
             dataset=dataset,
@@ -110,20 +141,41 @@ def _run_backend(
     )
 
 
-def _build_retriever(backend: str, records: list[DocumentChunk], args: argparse.Namespace, config: dict):
-    normalized = backend.lower().replace("_", "-")
+def _build_retriever(
+    backend: str,
+    records: list[DocumentChunk],
+    args: argparse.Namespace,
+    prepared_embeddings: PreparedEmbeddings | None,
+    embedding_error: Exception | None,
+):
+    normalized = _normalize_backend(backend)
     if normalized == "lexical":
         return LexicalRetriever(records)
+    if embedding_error is not None:
+        raise embedding_error
+    if prepared_embeddings is None:
+        raise ValueError("Vector backend requested without prepared embeddings.")
+    index = build_vector_index(normalized, dim=prepared_embeddings.dim, bit_width=args.bit_width)
+    return VectorRetriever(
+        records=records,
+        embedder=prepared_embeddings.embedder,
+        index=index,
+        record_vectors=prepared_embeddings.record_vectors,
+    )
+
+
+def _prepare_embeddings(dataset: str, records: list[DocumentChunk], args: argparse.Namespace, config: dict) -> PreparedEmbeddings:
     embedder = _build_embedder(args, config)
     dim = _embedding_dim(embedder)
-    index = build_vector_index(normalized, dim=dim, bit_width=args.bit_width)
+    dataset_cache_dir = args.embedding_cache_dir / _safe_dataset_cache_name(dataset)
     record_vectors = load_or_compute_embeddings(
         records=records,
         embedder=embedder,
         embedder_config=_embedder_cache_config(args, config),
-        cache_dir=args.embedding_cache_dir,
+        cache_dir=dataset_cache_dir,
+        require_cached=args.rag_only,
     )
-    return VectorRetriever(records, embedder, index, record_vectors=record_vectors)
+    return PreparedEmbeddings(embedder=embedder, dim=dim, record_vectors=record_vectors)
 
 
 def _build_embedder(args: argparse.Namespace, config: dict):
@@ -139,6 +191,14 @@ def _build_embedder(args: argparse.Namespace, config: dict):
     if not model_path:
         raise ValueError("Local embeddings require embeddings.model_path in config.")
     return LocalSentenceTransformerEmbedder(model_path=model_path, batch_size=batch_size)
+
+
+def _normalize_backend(backend: str) -> str:
+    return backend.lower().replace("_", "-")
+
+
+def _safe_dataset_cache_name(dataset: str) -> str:
+    return dataset.replace("/", "__").replace("\\", "__")
 
 
 def _embedding_dim(embedder) -> int:
@@ -283,6 +343,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--embedding-model-path", default=None, help="Override config embeddings.model_path.")
     parser.add_argument("--embedding-batch-size", type=int, default=None, help="Override config embeddings.batch_size.")
     parser.add_argument("--embedding-cache-dir", type=Path, default=Path(".cache/embeddings"))
+    parser.add_argument("--embedding-only", action="store_true", help="Only compute/load dataset chunk embedding caches; skip RAG.")
+    parser.add_argument("--rag-only", action="store_true", help="Require existing chunk embedding caches; never compute missing corpus embeddings.")
     return parser.parse_args()
 
 

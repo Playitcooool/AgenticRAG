@@ -36,6 +36,7 @@ def load_or_compute_embeddings(
     embedder: Embedder,
     embedder_config: dict,
     cache_dir: Path,
+    require_cached: bool = False,
 ) -> list[list[float]]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_key = embedding_cache_key(records, embedder_config)
@@ -44,6 +45,8 @@ def load_or_compute_embeddings(
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
         print(f"# using cached chunk embeddings: {cache_path}", flush=True)
         return payload["vectors"]
+    if require_cached:
+        raise FileNotFoundError(f"Required chunk embedding cache is missing: {cache_path}")
 
     vectors = embedder.encode([record.text for record in records])
     payload = {
