@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agentic_rag.config import load_config
-from agentic_rag.embeddings import HashingEmbedder
+from agentic_rag.embeddings import HashingEmbedder, LocalSentenceTransformerEmbedder
 from agentic_rag.llm import LLMClientError, OpenAICompatibleClient
 from agentic_rag.llm_agents import build_llm_agents
 from agentic_rag.pipeline import AgenticRAGPipeline
@@ -45,7 +45,7 @@ def main() -> None:
         questions = _load_questions(dataset_path / "questions.json")[: args.limit]
         for backend in args.backends:
             print(f"# starting dataset={dataset} backend={backend} questions={len(questions)}", flush=True)
-            row = _run_backend(dataset, backend, records, questions, args, llm_client)
+            row = _run_backend(dataset, backend, records, questions, args, config, llm_client)
             rows.append(row)
             _print_row(row)
 
@@ -60,11 +60,12 @@ def _run_backend(
     records: list[DocumentChunk],
     questions: list[dict],
     args: argparse.Namespace,
+    config: dict,
     llm_client: OpenAICompatibleClient | None,
 ) -> BenchmarkRow:
     try:
-        retriever = _build_retriever(backend, records, dim=args.dim, bit_width=args.bit_width)
-    except (BackendUnavailable, ImportError, ValueError) as exc:
+        retriever = _build_retriever(backend, records, args=args, config=config)
+    except (BackendUnavailable, ImportError, ValueError, LLMClientError, FileNotFoundError) as exc:
         return BenchmarkRow(
             dataset=dataset,
             backend=backend,
@@ -108,13 +109,38 @@ def _run_backend(
     )
 
 
-def _build_retriever(backend: str, records: list[DocumentChunk], dim: int, bit_width: int):
+def _build_retriever(backend: str, records: list[DocumentChunk], args: argparse.Namespace, config: dict):
     normalized = backend.lower().replace("_", "-")
     if normalized == "lexical":
         return LexicalRetriever(records)
-    embedder = HashingEmbedder(dim=dim)
-    index = build_vector_index(normalized, dim=dim, bit_width=bit_width)
+    embedder = _build_embedder(args, config)
+    dim = _embedding_dim(embedder)
+    index = build_vector_index(normalized, dim=dim, bit_width=args.bit_width)
     return VectorRetriever(records, embedder, index)
+
+
+def _build_embedder(args: argparse.Namespace, config: dict):
+    embedding_config = config.get("embeddings", {}) if isinstance(config.get("embeddings", {}), dict) else {}
+    provider = args.embedding_provider or embedding_config.get("provider", "local")
+    if provider == "hashing":
+        return HashingEmbedder(dim=args.dim)
+    if provider != "local":
+        raise ValueError(f"unknown embedding provider: {provider}")
+
+    model_path = args.embedding_model_path or embedding_config.get("model_path")
+    batch_size = args.embedding_batch_size or int(embedding_config.get("batch_size", 32))
+    if not model_path:
+        raise ValueError("Local embeddings require embeddings.model_path in config.")
+    return LocalSentenceTransformerEmbedder(model_path=model_path, batch_size=batch_size)
+
+
+def _embedding_dim(embedder) -> int:
+    if isinstance(embedder, HashingEmbedder):
+        return embedder.dim
+    probe = embedder.encode_one("dimension probe")
+    if not probe:
+        raise ValueError("embedding model returned an empty vector")
+    return len(probe)
 
 
 def _build_llm_client(args: argparse.Namespace, config: dict) -> OpenAICompatibleClient | None:
@@ -231,6 +257,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--llm-api-key", default=None, help="Override config llm.api_key.")
     parser.add_argument("--llm-timeout", type=float, default=None, help="Override config llm.timeout.")
     parser.add_argument("--llm-temperature", type=float, default=None, help="Override config llm.temperature.")
+    parser.add_argument("--embedding-provider", default=None, help="Override config embeddings.provider: local or hashing.")
+    parser.add_argument("--embedding-model-path", default=None, help="Override config embeddings.model_path.")
+    parser.add_argument("--embedding-batch-size", type=int, default=None, help="Override config embeddings.batch_size.")
     return parser.parse_args()
 
 

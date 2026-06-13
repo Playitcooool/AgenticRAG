@@ -19,6 +19,10 @@ llm:
   api_key: "no_need"
   timeout: 120
   temperature: 0.0
+embeddings:
+  provider: "local"
+  model_path: "models/embeddinggemma-300m"
+  batch_size: 32
 """.strip(),
                 encoding="utf-8",
             )
@@ -30,6 +34,9 @@ llm:
         self.assertEqual("no_need", config["llm"]["api_key"])
         self.assertEqual(120, config["llm"]["timeout"])
         self.assertEqual(0.0, config["llm"]["temperature"])
+        self.assertEqual("local", config["embeddings"]["provider"])
+        self.assertEqual("models/embeddinggemma-300m", config["embeddings"]["model_path"])
+        self.assertEqual(32, config["embeddings"]["batch_size"])
 
     def test_missing_config_returns_empty_dict(self) -> None:
         self.assertEqual({}, load_config(Path("does-not-exist.yaml")))

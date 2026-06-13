@@ -4,3 +4,7 @@ llm:
   api_key: "no_need"
   timeout: 120
   temperature: 0.0
+embeddings:
+  provider: "local"
+  model_path: "models/embeddinggemma-300m"
+  batch_size: 32

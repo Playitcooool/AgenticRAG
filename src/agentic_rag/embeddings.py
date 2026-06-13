@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from pathlib import Path
 
 from agentic_rag.retriever import tokenize
 
@@ -34,3 +35,39 @@ class HashingEmbedder:
         if norm == 0:
             return vector
         return [value / norm for value in vector]
+
+
+class LocalSentenceTransformerEmbedder:
+    """Embedding model loaded from a local SentenceTransformers-compatible path."""
+
+    def __init__(self, model_path: str | Path, batch_size: int = 32):
+        self.model_path = Path(model_path)
+        if not self.model_path.exists():
+            raise FileNotFoundError(
+                f"Local embedding model path does not exist: {self.model_path}. "
+                "Download or place EmbeddingGemma there before running vector benchmarks."
+            )
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as exc:
+            raise ImportError("Install the bench extra to use local embedding models: uv sync --extra bench") from exc
+
+        self.model = SentenceTransformer(str(self.model_path), local_files_only=True)
+        self.batch_size = batch_size
+        self.dim: int | None = None
+
+    def encode(self, texts: list[str]) -> list[list[float]]:
+        vectors = self.model.encode(
+            texts,
+            batch_size=self.batch_size,
+            convert_to_numpy=False,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        vectors = [list(map(float, vector)) for vector in vectors]
+        if vectors and self.dim is None:
+            self.dim = len(vectors[0])
+        return vectors
+
+    def encode_one(self, text: str) -> list[float]:
+        return self.encode([text])[0]

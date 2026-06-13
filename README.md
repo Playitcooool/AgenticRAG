@@ -70,7 +70,13 @@ llm:
   api_key: "no_need"
   timeout: 120
   temperature: 0.0
+embeddings:
+  provider: "local"
+  model_path: "models/embeddinggemma-300m"
+  batch_size: 32
 ```
+
+The vector benchmark uses a local EmbeddingGemma model loaded from `embeddings.model_path`; it does not call an embedding API. Put a local SentenceTransformers-compatible copy of `google/embeddinggemma-300m` at `models/embeddinggemma-300m`, or override the path. If you need the old deterministic vectors for debugging only, pass `--embedding-provider hashing`.
 
 Use another config file or override individual values when needed:
 
@@ -88,6 +94,12 @@ Useful overrides:
 
 ```bash
 LIMIT=25 RUN_NAME=faiss_vs_turbovec_llm_limit25 ./scripts/run_faiss_turbovec_llm_experiment.sh
+```
+
+If your local EmbeddingGemma files live elsewhere:
+
+```bash
+EMBEDDING_MODEL_PATH=/path/to/embeddinggemma-300m ./scripts/run_faiss_turbovec_llm_experiment.sh
 ```
 
 The script streams output to your terminal and also writes:
