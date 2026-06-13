@@ -12,6 +12,7 @@ RUN_NAME="${RUN_NAME:-faiss_vs_turbovec_llm_limit${LIMIT}}"
 OUTPUT_JSON="${OUTPUT_JSON:-${RESULTS_DIR}/${RUN_NAME}.json}"
 OUTPUT_LOG="${OUTPUT_LOG:-${RESULTS_DIR}/${RUN_NAME}.log}"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
+BENCHMARK_BIN="${BENCHMARK_BIN:-.venv/bin/agentic-rag-benchmark}"
 UV_BIN="${UV_BIN:-uv}"
 PYPI_INDEX_URL="${PYPI_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
 
@@ -27,7 +28,12 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
   "${UV_BIN}" venv
 fi
 
-if ! "${UV_BIN}" run python -c "import faiss, turbovec, numpy" >/dev/null 2>&1; then
+if [[ ! -x "${BENCHMARK_BIN}" ]]; then
+  echo "Installing this project into the virtualenv..."
+  "${UV_BIN}" pip install --python "${PYTHON_BIN}" -e .
+fi
+
+if ! "${PYTHON_BIN}" -c "import faiss, turbovec, numpy" >/dev/null 2>&1; then
   echo "Installing benchmark vector backends into ${PYTHON_BIN}..."
   "${UV_BIN}" pip install \
     --python "${PYTHON_BIN}" \
@@ -45,7 +51,8 @@ echo "  json:     ${OUTPUT_JSON}"
 echo
 
 set -x
-"${UV_BIN}" run agentic-rag-benchmark \
+export PYTHONUNBUFFERED=1
+"${BENCHMARK_BIN}" \
   --config "${CONFIG}" \
   --datasets ${DATASETS} \
   --limit "${LIMIT}" \

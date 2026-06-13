@@ -38,14 +38,17 @@ def main() -> None:
     config = load_config(args.config)
     llm_client = _build_llm_client(args, config)
     rows = []
+    _print_header()
     for dataset in args.datasets:
         dataset_path = args.data_dir / dataset
         records = _load_records(dataset_path / "chunks.json", source=dataset)
         questions = _load_questions(dataset_path / "questions.json")[: args.limit]
         for backend in args.backends:
-            rows.append(_run_backend(dataset, backend, records, questions, args, llm_client))
+            print(f"# starting dataset={dataset} backend={backend} questions={len(questions)}", flush=True)
+            row = _run_backend(dataset, backend, records, questions, args, llm_client)
+            rows.append(row)
+            _print_row(row)
 
-    _print_table(rows)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps([asdict(row) for row in rows], indent=2), encoding="utf-8")
@@ -171,6 +174,12 @@ def _all_retrieved(trace) -> list:
 
 
 def _print_table(rows: list[BenchmarkRow]) -> None:
+    _print_header()
+    for row in rows:
+        _print_row(row)
+
+
+def _print_header() -> None:
     headers = [
         "dataset",
         "backend",
@@ -181,25 +190,28 @@ def _print_table(rows: list[BenchmarkRow]) -> None:
         "rounds",
         "latency_ms",
     ]
-    print("\t".join(headers))
-    for row in rows:
-        evidence = "n/a" if row.evidence_recall is None else f"{row.evidence_recall:.3f}"
-        print(
-            "\t".join(
-                [
-                    row.dataset,
-                    row.backend,
-                    row.status,
-                    str(row.questions),
-                    f"{row.sufficient_rate:.3f}",
-                    evidence,
-                    f"{row.avg_rounds:.2f}",
-                    f"{row.avg_latency_ms:.2f}",
-                ]
-            )
-        )
-        if row.error:
-            print(f"# {row.backend} skipped: {row.error}")
+    print("\t".join(headers), flush=True)
+
+
+def _print_row(row: BenchmarkRow) -> None:
+    evidence = "n/a" if row.evidence_recall is None else f"{row.evidence_recall:.3f}"
+    print(
+        "\t".join(
+            [
+                row.dataset,
+                row.backend,
+                row.status,
+                str(row.questions),
+                f"{row.sufficient_rate:.3f}",
+                evidence,
+                f"{row.avg_rounds:.2f}",
+                f"{row.avg_latency_ms:.2f}",
+            ]
+        ),
+        flush=True,
+    )
+    if row.error:
+        print(f"# {row.backend} skipped: {row.error}", flush=True)
 
 
 def _parse_args() -> argparse.Namespace:
