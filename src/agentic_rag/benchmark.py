@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agentic_rag.config import load_config
+from agentic_rag.embedding_cache import load_or_compute_embeddings
 from agentic_rag.embeddings import HashingEmbedder, LocalSentenceTransformerEmbedder
 from agentic_rag.llm import LLMClientError, OpenAICompatibleClient
 from agentic_rag.llm_agents import build_llm_agents
@@ -116,7 +117,13 @@ def _build_retriever(backend: str, records: list[DocumentChunk], args: argparse.
     embedder = _build_embedder(args, config)
     dim = _embedding_dim(embedder)
     index = build_vector_index(normalized, dim=dim, bit_width=args.bit_width)
-    return VectorRetriever(records, embedder, index)
+    record_vectors = load_or_compute_embeddings(
+        records=records,
+        embedder=embedder,
+        embedder_config=_embedder_cache_config(args, config),
+        cache_dir=args.embedding_cache_dir,
+    )
+    return VectorRetriever(records, embedder, index, record_vectors=record_vectors)
 
 
 def _build_embedder(args: argparse.Namespace, config: dict):
@@ -141,6 +148,21 @@ def _embedding_dim(embedder) -> int:
     if not probe:
         raise ValueError("embedding model returned an empty vector")
     return len(probe)
+
+
+def _embedder_cache_config(args: argparse.Namespace, config: dict) -> dict:
+    embedding_config = config.get("embeddings", {}) if isinstance(config.get("embeddings", {}), dict) else {}
+    provider = args.embedding_provider or embedding_config.get("provider", "local")
+    if provider == "hashing":
+        return {
+            "provider": "hashing",
+            "dim": args.dim,
+        }
+    return {
+        "provider": "local",
+        "model_path": str(args.embedding_model_path or embedding_config.get("model_path")),
+        "batch_size": args.embedding_batch_size or int(embedding_config.get("batch_size", 32)),
+    }
 
 
 def _build_llm_client(args: argparse.Namespace, config: dict) -> OpenAICompatibleClient | None:
@@ -260,6 +282,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--embedding-provider", default=None, help="Override config embeddings.provider: local or hashing.")
     parser.add_argument("--embedding-model-path", default=None, help="Override config embeddings.model_path.")
     parser.add_argument("--embedding-batch-size", type=int, default=None, help="Override config embeddings.batch_size.")
+    parser.add_argument("--embedding-cache-dir", type=Path, default=Path(".cache/embeddings"))
     return parser.parse_args()
 
 

@@ -78,6 +78,8 @@ embeddings:
 
 The vector benchmark uses a local EmbeddingGemma model loaded from `embeddings.model_path`; it does not call an embedding API. Put a local SentenceTransformers-compatible copy of `google/embeddinggemma-300m` at `models/embeddinggemma-300m`, or override the path. If you need the old deterministic vectors for debugging only, pass `--embedding-provider hashing`.
 
+Chunk embeddings are cached on disk in `.cache/embeddings/`. The cache key includes the embedding provider/model settings and corpus chunk hashes, so FAISS and turbovec reuse the same chunk vectors instead of re-embedding text for every backend run.
+
 Use another config file or override individual values when needed:
 
 ```bash

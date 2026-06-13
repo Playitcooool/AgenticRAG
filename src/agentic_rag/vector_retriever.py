@@ -12,11 +12,17 @@ from agentic_rag.vector_backends import VectorIndex
 class VectorRetriever:
     """Retriever that delegates nearest-neighbor search to a vector index."""
 
-    def __init__(self, records: Iterable[DocumentChunk], embedder: HashingEmbedder, index: VectorIndex):
+    def __init__(
+        self,
+        records: Iterable[DocumentChunk],
+        embedder: HashingEmbedder,
+        index: VectorIndex,
+        record_vectors: list[list[float]] | None = None,
+    ):
         self.records = list(records)
         self.embedder = embedder
         self.index = index
-        self.index.add(self.embedder.encode([record.text for record in self.records]))
+        self.index.add(record_vectors or self.embedder.encode([record.text for record in self.records]))
 
     def search(self, queries: Iterable[str], top_k: int = 4) -> list[SearchResult]:
         best_by_record: dict[str, SearchResult] = {}
