@@ -59,7 +59,6 @@ echo "  log:      ${OUTPUT_LOG}"
 echo "  json:     ${OUTPUT_JSON}"
 echo
 
-set -x
 export PYTHONUNBUFFERED=1
 EXTRA_ARGS=()
 if [[ -n "${EMBEDDING_PROVIDER}" ]]; then
@@ -71,13 +70,19 @@ fi
 if [[ -n "${EMBEDDING_BATCH_SIZE}" ]]; then
   EXTRA_ARGS+=(--embedding-batch-size "${EMBEDDING_BATCH_SIZE}")
 fi
-"${BENCHMARK_BIN}" \
+CMD=(
+  "${BENCHMARK_BIN}"
   --config "${CONFIG}" \
   --datasets ${DATASETS} \
   --limit "${LIMIT}" \
   --backends ${BACKENDS} \
   --top-k "${TOP_K}" \
   --max-rounds "${MAX_ROUNDS}" \
-  --output "${OUTPUT_JSON}" \
-  "${EXTRA_ARGS[@]}" \
-  2>&1 | tee "${OUTPUT_LOG}"
+  --output "${OUTPUT_JSON}"
+)
+if ((${#EXTRA_ARGS[@]})); then
+  CMD+=("${EXTRA_ARGS[@]}")
+fi
+
+set -x
+"${CMD[@]}" 2>&1 | tee "${OUTPUT_LOG}"
