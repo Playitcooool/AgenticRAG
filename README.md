@@ -78,6 +78,23 @@ Use another config file or override individual values when needed:
 uv run agentic-rag-benchmark --config config.yaml --llm-model another-model-id
 ```
 
+To start the FAISS/turbovec LLM experiment yourself from a terminal:
+
+```bash
+./scripts/run_faiss_turbovec_llm_experiment.sh
+```
+
+Useful overrides:
+
+```bash
+LIMIT=25 RUN_NAME=faiss_vs_turbovec_llm_limit25 ./scripts/run_faiss_turbovec_llm_experiment.sh
+```
+
+The script streams output to your terminal and also writes:
+
+- `results/<run-name>.log`
+- `results/<run-name>.json`
+
 ## Repository Layout
 
 ```text

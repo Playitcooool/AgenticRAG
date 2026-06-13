@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DATASETS="${DATASETS:-medical hotpotqa musique 2wikimultihop novel}"
+BACKENDS="${BACKENDS:-faiss-flat faiss-pq turbovec}"
+LIMIT="${LIMIT:-5}"
+TOP_K="${TOP_K:-4}"
+MAX_ROUNDS="${MAX_ROUNDS:-3}"
+CONFIG="${CONFIG:-config.yaml}"
+RESULTS_DIR="${RESULTS_DIR:-results}"
+RUN_NAME="${RUN_NAME:-faiss_vs_turbovec_llm_limit${LIMIT}}"
+OUTPUT_JSON="${OUTPUT_JSON:-${RESULTS_DIR}/${RUN_NAME}.json}"
+OUTPUT_LOG="${OUTPUT_LOG:-${RESULTS_DIR}/${RUN_NAME}.log}"
+PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
+UV_BIN="${UV_BIN:-uv}"
+PYPI_INDEX_URL="${PYPI_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+
+mkdir -p "${RESULTS_DIR}"
+
+if ! command -v "${UV_BIN}" >/dev/null 2>&1; then
+  echo "uv is required but was not found on PATH." >&2
+  exit 1
+fi
+
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "Project virtualenv not found at ${PYTHON_BIN}; creating it with uv." >&2
+  "${UV_BIN}" venv
+fi
+
+if ! "${UV_BIN}" run python -c "import faiss, turbovec, numpy" >/dev/null 2>&1; then
+  echo "Installing benchmark vector backends into ${PYTHON_BIN}..."
+  "${UV_BIN}" pip install \
+    --python "${PYTHON_BIN}" \
+    --index-url "${PYPI_INDEX_URL}" \
+    numpy faiss-cpu turbovec
+fi
+
+echo "Starting AgenticRAG FAISS/turbovec experiment"
+echo "  config:   ${CONFIG}"
+echo "  datasets: ${DATASETS}"
+echo "  backends: ${BACKENDS}"
+echo "  limit:    ${LIMIT}"
+echo "  log:      ${OUTPUT_LOG}"
+echo "  json:     ${OUTPUT_JSON}"
+echo
+
+set -x
+"${UV_BIN}" run agentic-rag-benchmark \
+  --config "${CONFIG}" \
+  --datasets ${DATASETS} \
+  --limit "${LIMIT}" \
+  --backends ${BACKENDS} \
+  --top-k "${TOP_K}" \
+  --max-rounds "${MAX_ROUNDS}" \
+  --output "${OUTPUT_JSON}" \
+  2>&1 | tee "${OUTPUT_LOG}"

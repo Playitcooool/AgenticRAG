@@ -11,3 +11,4 @@ build/
 htmlcov/
 .env
 .cache/
+results/
