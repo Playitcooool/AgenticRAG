@@ -89,6 +89,8 @@ RAG_ONLY=1 DATASETS=medical ./scripts/run_faiss_turbovec_llm_experiment.sh
 
 `RAG_ONLY=1` requires the dataset cache to already exist and will not compute missing corpus embeddings.
 
+For small datasets, `faiss-pq` with the default `--bit-width 4` may be skipped because FAISS recommends at least 624 training vectors. Use `--bit-width 2` or omit `faiss-pq` for smaller corpora.
+
 Use another config file or override individual values when needed:
 
 ```bash

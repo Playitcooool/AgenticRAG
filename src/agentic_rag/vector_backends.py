@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+FAISS_PQ_MIN_POINTS_PER_CENTROID = 39
+
 
 class BackendUnavailable(RuntimeError):
     """Raised when an optional native vector backend is not installed."""
@@ -102,13 +104,18 @@ class FaissPQIndex:
 
         self._faiss = faiss
         self._np = np
-        self._index = faiss.IndexPQ(self.dim, self.dim, self.bit_width, faiss.METRIC_INNER_PRODUCT)
+        self.subquantizers = choose_pq_subquantizers(self.dim)
+        self._index = faiss.IndexPQ(self.dim, self.subquantizers, self.bit_width, faiss.METRIC_INNER_PRODUCT)
 
     def add(self, vectors: list[list[float]]) -> None:
         matrix = self._np.asarray(vectors, dtype="float32")
-        if len(matrix) < 2**self.bit_width:
+        if matrix.ndim != 2 or matrix.shape[1] != self.dim:
+            raise ValueError(f"expected vectors with shape (n, {self.dim})")
+        min_training_points = faiss_pq_min_training_points(self.bit_width)
+        if len(matrix) < min_training_points:
             raise BackendUnavailable(
-                f"faiss-pq needs at least {2**self.bit_width} vectors to train with bit_width={self.bit_width}."
+                f"faiss-pq needs at least {min_training_points} training vectors for bit_width={self.bit_width}; "
+                f"got {len(matrix)}. Use a larger dataset/cache, lower --bit-width to 2, or skip faiss-pq."
             )
         self._index.train(matrix)
         self._index.add(matrix)
@@ -146,11 +153,11 @@ class TurboVecIndex:
         self._index.add(matrix)
 
     def search(self, query: list[float], k: int) -> list[tuple[int, float]]:
-        query_vector = self._np.asarray(query, dtype="float32")
-        scores, indices = self._index.search(query_vector, k=k)
+        query_matrix = self._np.asarray([query], dtype="float32")
+        scores, indices = self._index.search(query_matrix, k=k)
         return [
             (int(index), float(score))
-            for index, score in zip(indices, scores, strict=True)
+            for index, score in zip(indices[0], scores[0], strict=True)
             if index >= 0
         ]
 
@@ -166,3 +173,15 @@ def build_vector_index(name: str, dim: int, bit_width: int = 4) -> VectorIndex:
     if normalized == "turbovec":
         return TurboVecIndex(dim=dim, bit_width=bit_width)
     raise ValueError(f"unknown vector backend: {name}")
+
+
+def faiss_pq_min_training_points(bit_width: int) -> int:
+    return FAISS_PQ_MIN_POINTS_PER_CENTROID * (2**bit_width)
+
+
+def choose_pq_subquantizers(dim: int, max_subquantizers: int = 96) -> int:
+    upper = min(dim, max_subquantizers)
+    for candidate in range(upper, 0, -1):
+        if dim % candidate == 0:
+            return candidate
+    return 1

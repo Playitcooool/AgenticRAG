@@ -117,18 +117,31 @@ def _run_backend(
     llm_agents = build_llm_agents(llm_client) if llm_client else {}
     pipeline = AgenticRAGPipeline(retriever, max_rounds=args.max_rounds, top_k=args.top_k, **llm_agents)
 
-    for item in questions:
-        started = time.perf_counter()
-        trace = pipeline.run(item["question"])
-        latencies.append((time.perf_counter() - started) * 1000)
-        rounds.append(len(trace.queries_by_round))
-        if trace.assessments[-1].status == ContextStatus.SUFFICIENT:
-            sufficient_count += 1
-        evidence = _normalize_evidence(item.get("evidence"))
-        if evidence:
-            retrieved_text = "\n".join(result.record.text.lower() for result in _all_retrieved(trace))
-            hits = sum(1 for claim in evidence if claim.lower() in retrieved_text)
-            evidence_scores.append(hits / len(evidence))
+    try:
+        for item in questions:
+            started = time.perf_counter()
+            trace = pipeline.run(item["question"])
+            latencies.append((time.perf_counter() - started) * 1000)
+            rounds.append(len(trace.queries_by_round))
+            if trace.assessments[-1].status == ContextStatus.SUFFICIENT:
+                sufficient_count += 1
+            evidence = _normalize_evidence(item.get("evidence"))
+            if evidence:
+                retrieved_text = "\n".join(result.record.text.lower() for result in _all_retrieved(trace))
+                hits = sum(1 for claim in evidence if claim.lower() in retrieved_text)
+                evidence_scores.append(hits / len(evidence))
+    except Exception as exc:
+        return BenchmarkRow(
+            dataset=dataset,
+            backend=backend,
+            questions=len(latencies),
+            sufficient_rate=sufficient_count / len(latencies) if latencies else 0.0,
+            evidence_recall=statistics.mean(evidence_scores) if evidence_scores else None,
+            avg_rounds=statistics.mean(rounds) if rounds else 0.0,
+            avg_latency_ms=statistics.mean(latencies) if latencies else 0.0,
+            status="failed",
+            error=str(exc),
+        )
 
     return BenchmarkRow(
         dataset=dataset,
