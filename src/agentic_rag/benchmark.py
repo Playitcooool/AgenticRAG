@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agentic_rag.embeddings import HashingEmbedder
+from agentic_rag.llm import LLMClientError, OpenAICompatibleClient
+from agentic_rag.llm_agents import build_llm_agents
 from agentic_rag.pipeline import AgenticRAGPipeline
 from agentic_rag.retriever import LexicalRetriever
 from agentic_rag.types import ContextStatus, DocumentChunk
@@ -32,13 +34,14 @@ class BenchmarkRow:
 
 def main() -> None:
     args = _parse_args()
+    llm_client = _build_llm_client(args)
     rows = []
     for dataset in args.datasets:
         dataset_path = args.data_dir / dataset
         records = _load_records(dataset_path / "chunks.json", source=dataset)
         questions = _load_questions(dataset_path / "questions.json")[: args.limit]
         for backend in args.backends:
-            rows.append(_run_backend(dataset, backend, records, questions, args))
+            rows.append(_run_backend(dataset, backend, records, questions, args, llm_client))
 
     _print_table(rows)
     if args.output:
@@ -52,6 +55,7 @@ def _run_backend(
     records: list[DocumentChunk],
     questions: list[dict],
     args: argparse.Namespace,
+    llm_client: OpenAICompatibleClient | None,
 ) -> BenchmarkRow:
     try:
         retriever = _build_retriever(backend, records, dim=args.dim, bit_width=args.bit_width)
@@ -72,7 +76,8 @@ def _run_backend(
     evidence_scores = []
     rounds = []
     latencies = []
-    pipeline = AgenticRAGPipeline(retriever, max_rounds=args.max_rounds, top_k=args.top_k)
+    llm_agents = build_llm_agents(llm_client) if llm_client else {}
+    pipeline = AgenticRAGPipeline(retriever, max_rounds=args.max_rounds, top_k=args.top_k, **llm_agents)
 
     for item in questions:
         started = time.perf_counter()
@@ -105,6 +110,24 @@ def _build_retriever(backend: str, records: list[DocumentChunk], dim: int, bit_w
     embedder = HashingEmbedder(dim=dim)
     index = build_vector_index(normalized, dim=dim, bit_width=bit_width)
     return VectorRetriever(records, embedder, index)
+
+
+def _build_llm_client(args: argparse.Namespace) -> OpenAICompatibleClient | None:
+    if not args.llm_base_url:
+        return None
+    client = OpenAICompatibleClient(
+        base_url=args.llm_base_url,
+        model=args.llm_model,
+        api_key=args.llm_api_key,
+        timeout=args.llm_timeout,
+        temperature=args.llm_temperature,
+    )
+    try:
+        model = client.resolve_model()
+    except LLMClientError as exc:
+        raise SystemExit(f"Could not initialize local LLM at {args.llm_base_url}: {exc}") from exc
+    print(f"# using local LLM: {args.llm_base_url} model={model}")
+    return client
 
 
 def _load_records(path: Path, source: str) -> list[DocumentChunk]:
@@ -179,6 +202,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dim", type=int, default=384)
     parser.add_argument("--bit-width", type=int, default=4, choices=[2, 4])
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--llm-base-url", default=None, help="OpenAI-compatible server base URL, e.g. http://localhost:1234")
+    parser.add_argument("--llm-model", default=None, help="Model id. Defaults to the first /v1/models result.")
+    parser.add_argument("--llm-api-key", default="no_need")
+    parser.add_argument("--llm-timeout", type=float, default=60.0)
+    parser.add_argument("--llm-temperature", type=float, default=0.0)
     return parser.parse_args()
 
 

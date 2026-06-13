@@ -52,6 +52,24 @@ The experiment keeps the agentic RAG architecture fixed and swaps only the retri
 
 `turbovec` is wired through its Python `TurboQuantIndex(dim=..., bit_width=...)` API. FAISS is wired through both `IndexFlatIP` (`faiss-flat`, an exact-search ceiling) and `IndexPQ` (`faiss-pq`, a compressed-index baseline). The benchmark also accepts `--backends lexical exact-numpy` for debugging when native vector packages are unavailable.
 
+Use a local OpenAI-compatible LLM for task decomposition, sufficient-context judging, and final synthesis:
+
+```bash
+uv run agentic-rag-benchmark \
+  --datasets medical \
+  --limit 5 \
+  --backends lexical \
+  --llm-base-url http://localhost:1234
+```
+
+The default local API key is `no_need`; override it with `--llm-api-key` only if your server requires a different value.
+
+If your server exposes multiple models, pass one explicitly:
+
+```bash
+uv run agentic-rag-benchmark --llm-base-url http://localhost:1234 --llm-model your-model-id
+```
+
 ## Repository Layout
 
 ```text

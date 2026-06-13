@@ -17,14 +17,25 @@ from agentic_rag.types import ContextStatus, PipelineTrace, SearchResult
 class AgenticRAGPipeline:
     """Coordinate orchestration, retrieval, context checking, iteration, and synthesis."""
 
-    def __init__(self, retriever, max_rounds: int = 3, top_k: int = 4):
-        self.root_agent = RootAgent()
-        self.planner_agent = PlannerAgent()
-        self.query_rewriter = QueryRewriter()
+    def __init__(
+        self,
+        retriever,
+        max_rounds: int = 3,
+        top_k: int = 4,
+        root_agent=None,
+        planner_agent=None,
+        query_rewriter=None,
+        draft_agent=None,
+        sufficient_context_agent=None,
+        synthesis_agent=None,
+    ):
+        self.root_agent = root_agent or RootAgent()
+        self.planner_agent = planner_agent or PlannerAgent()
+        self.query_rewriter = query_rewriter or QueryRewriter()
         self.rag_agent = RAGAgent(retriever)
-        self.draft_agent = DraftAgent()
-        self.sufficient_context_agent = SufficientContextAgent()
-        self.synthesis_agent = SynthesisAgent()
+        self.draft_agent = draft_agent or DraftAgent()
+        self.sufficient_context_agent = sufficient_context_agent or SufficientContextAgent()
+        self.synthesis_agent = synthesis_agent or SynthesisAgent()
         self.max_rounds = max_rounds
         self.top_k = top_k
 
