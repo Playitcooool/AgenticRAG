@@ -19,6 +19,39 @@ uv venv
 uv run agentic-rag-demo
 ```
 
+## FAISS vs turbovec Experiment
+
+Install the optional benchmark backends:
+
+```bash
+uv sync --extra bench
+```
+
+Run a small smoke benchmark on the existing datasets:
+
+```bash
+uv run agentic-rag-benchmark --datasets medical hotpotqa --limit 25 --backends faiss-flat faiss-pq turbovec
+```
+
+Write full results to JSON:
+
+```bash
+uv run agentic-rag-benchmark \
+  --datasets medical hotpotqa musique 2wikimultihop novel \
+  --limit 100 \
+  --backends faiss-flat faiss-pq turbovec \
+  --output results/faiss_vs_turbovec.json
+```
+
+The experiment keeps the agentic RAG architecture fixed and swaps only the retrieval data backbone. It reports:
+
+- sufficient-context rate after the iterative agent loop
+- evidence recall when benchmark questions provide evidence strings
+- average retrieval/synthesis loop rounds
+- average latency per question
+
+`turbovec` is wired through its Python `TurboQuantIndex(dim=..., bit_width=...)` API. FAISS is wired through both `IndexFlatIP` (`faiss-flat`, an exact-search ceiling) and `IndexPQ` (`faiss-pq`, a compressed-index baseline). The benchmark also accepts `--backends lexical exact-numpy` for debugging when native vector packages are unavailable.
+
 ## Repository Layout
 
 ```text

@@ -8,8 +8,16 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "AgenticRAG Contributors" }]
 dependencies = []
 
+[project.optional-dependencies]
+bench = [
+    "numpy>=1.26",
+    "faiss-cpu>=1.8",
+    "turbovec>=0.1",
+]
+
 [project.scripts]
 agentic-rag-demo = "agentic_rag.demo:main"
+agentic-rag-benchmark = "agentic_rag.benchmark:main"
 
 [build-system]
 requires = ["hatchling"]
