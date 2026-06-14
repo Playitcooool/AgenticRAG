@@ -27,10 +27,10 @@ Install the optional benchmark backends:
 uv sync --extra bench
 ```
 
-Run a small smoke benchmark on the existing datasets:
+Run the full benchmark on the existing datasets:
 
 ```bash
-uv run agentic-rag-benchmark --datasets medical hotpotqa --limit 25 --backends faiss-flat faiss-pq turbovec
+uv run agentic-rag-benchmark --datasets medical hotpotqa --backends faiss-flat faiss-pq turbovec
 ```
 
 Write full results to JSON:
@@ -38,7 +38,6 @@ Write full results to JSON:
 ```bash
 uv run agentic-rag-benchmark \
   --datasets medical hotpotqa musique 2wikimultihop novel \
-  --limit 100 \
   --backends faiss-flat faiss-pq turbovec \
   --output results/faiss_vs_turbovec.json
 ```
@@ -57,7 +56,6 @@ Use a local OpenAI-compatible LLM for task decomposition, sufficient-context jud
 ```bash
 uv run agentic-rag-benchmark \
   --datasets medical \
-  --limit 5 \
   --backends lexical
 ```
 
@@ -103,7 +101,7 @@ To start the FAISS/turbovec LLM experiment yourself from a terminal:
 ./scripts/run_faiss_turbovec_llm_experiment.sh
 ```
 
-Useful overrides:
+Useful smoke-test override:
 
 ```bash
 LIMIT=25 RUN_NAME=faiss_vs_turbovec_llm_limit25 ./scripts/run_faiss_turbovec_llm_experiment.sh

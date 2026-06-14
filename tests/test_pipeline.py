@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from agentic_rag.agents import SufficientContextAgent
+from agentic_rag.benchmark import _parse_args
 from agentic_rag.demo import build_demo_retriever
 from agentic_rag.pipeline import AgenticRAGPipeline
 from agentic_rag.retriever import LexicalRetriever
@@ -67,6 +69,14 @@ class AgenticRAGPipelineTest(unittest.TestCase):
             [task.description for task in trace.tasks],
         )
         self.assertEqual(["task_1", "task_2", "task_3"], [task.name for task in trace.tasks])
+
+
+class BenchmarkCliTest(unittest.TestCase):
+    def test_limit_defaults_to_all_questions(self) -> None:
+        args = _parse_args([])
+
+        self.assertIsNone(args.limit)
+        self.assertEqual(Path("config.yaml"), args.config)
 
 
 if __name__ == "__main__":

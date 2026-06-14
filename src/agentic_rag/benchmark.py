@@ -51,7 +51,9 @@ def main() -> None:
     for dataset in args.datasets:
         dataset_path = args.data_dir / dataset
         records = _load_records(dataset_path / "chunks.json", source=dataset)
-        questions = _load_questions(dataset_path / "questions.json")[: args.limit]
+        questions = _load_questions(dataset_path / "questions.json")
+        if args.limit is not None:
+            questions = questions[: args.limit]
         vector_backends = [backend for backend in args.backends if _normalize_backend(backend) != "lexical"]
         prepared_embeddings: PreparedEmbeddings | None = None
         embedding_error: Exception | None = None
@@ -335,13 +337,13 @@ def _print_row(row: BenchmarkRow) -> None:
         print(f"# {row.backend} skipped: {row.error}", flush=True)
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--data-dir", type=Path, default=Path("datasets"))
     parser.add_argument("--datasets", nargs="+", default=["medical", "hotpotqa", "musique", "2wikimultihop", "novel"])
     parser.add_argument("--backends", nargs="+", default=["faiss-flat", "faiss-pq", "turbovec"])
-    parser.add_argument("--limit", type=int, default=50, help="Questions per dataset.")
+    parser.add_argument("--limit", type=int, default=None, help="Questions per dataset. Defaults to all questions.")
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--max-rounds", type=int, default=3)
     parser.add_argument("--dim", type=int, default=384)
@@ -358,7 +360,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--embedding-cache-dir", type=Path, default=Path(".cache/embeddings"))
     parser.add_argument("--embedding-only", action="store_true", help="Only compute/load dataset chunk embedding caches; skip RAG.")
     parser.add_argument("--rag-only", action="store_true", help="Require existing chunk embedding caches; never compute missing corpus embeddings.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 if __name__ == "__main__":

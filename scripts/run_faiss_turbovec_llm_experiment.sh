@@ -3,7 +3,7 @@ set -euo pipefail
 
 DATASETS="${DATASETS:-medical hotpotqa musique 2wikimultihop novel}"
 BACKENDS="${BACKENDS:-faiss-flat faiss-pq turbovec}"
-LIMIT="${LIMIT:-5}"
+LIMIT="${LIMIT:-}"
 TOP_K="${TOP_K:-4}"
 MAX_ROUNDS="${MAX_ROUNDS:-3}"
 CONFIG="${CONFIG:-config.yaml}"
@@ -13,7 +13,11 @@ EMBEDDING_BATCH_SIZE="${EMBEDDING_BATCH_SIZE:-}"
 EMBEDDING_ONLY="${EMBEDDING_ONLY:-}"
 RAG_ONLY="${RAG_ONLY:-}"
 RESULTS_DIR="${RESULTS_DIR:-results}"
-RUN_NAME="${RUN_NAME:-faiss_vs_turbovec_llm_limit${LIMIT}}"
+if [[ -n "${LIMIT}" ]]; then
+  RUN_NAME="${RUN_NAME:-faiss_vs_turbovec_llm_limit${LIMIT}}"
+else
+  RUN_NAME="${RUN_NAME:-faiss_vs_turbovec_llm_full}"
+fi
 OUTPUT_JSON="${OUTPUT_JSON:-${RESULTS_DIR}/${RUN_NAME}.json}"
 OUTPUT_LOG="${OUTPUT_LOG:-${RESULTS_DIR}/${RUN_NAME}.log}"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
@@ -53,7 +57,11 @@ echo "Starting AgenticRAG FAISS/turbovec experiment"
 echo "  config:   ${CONFIG}"
 echo "  datasets: ${DATASETS}"
 echo "  backends: ${BACKENDS}"
-echo "  limit:    ${LIMIT}"
+if [[ -n "${LIMIT}" ]]; then
+  echo "  limit:    ${LIMIT}"
+else
+  echo "  limit:    all"
+fi
 if [[ -n "${EMBEDDING_MODEL_PATH}" ]]; then
   echo "  embedding override: ${EMBEDDING_MODEL_PATH}"
 fi
@@ -78,11 +86,13 @@ fi
 if [[ -n "${RAG_ONLY}" ]]; then
   EXTRA_ARGS+=(--rag-only)
 fi
+if [[ -n "${LIMIT}" ]]; then
+  EXTRA_ARGS+=(--limit "${LIMIT}")
+fi
 CMD=(
   "${BENCHMARK_BIN}"
   --config "${CONFIG}" \
   --datasets ${DATASETS} \
-  --limit "${LIMIT}" \
   --backends ${BACKENDS} \
   --top-k "${TOP_K}" \
   --max-rounds "${MAX_ROUNDS}" \
