@@ -52,7 +52,7 @@ class LocalSentenceTransformerEmbedder:
         except ImportError as exc:
             raise ImportError("Install the bench extra to use local embedding models: uv sync --extra bench") from exc
 
-        self.model = SentenceTransformer(str(self.model_path), local_files_only=True)
+        self.model = SentenceTransformer(str(self.model_path), local_files_only=True, device="cpu")
         self.batch_size = batch_size
         self.dim: int | None = None
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from agentic_rag.config import load_config
 from agentic_rag.embedding_cache import load_or_compute_embeddings
 from agentic_rag.embeddings import HashingEmbedder, LocalSentenceTransformerEmbedder
-from agentic_rag.llm import LLMClientError, OpenAICompatibleClient
+from agentic_rag.llm import LLMClientError, OpenAICompatibleClient, AnthropicMessagesClient
 from agentic_rag.llm_agents import build_llm_agents
 from agentic_rag.pipeline import AgenticRAGPipeline
 from agentic_rag.retriever import LexicalRetriever
@@ -240,7 +240,7 @@ def _embedder_cache_config(args: argparse.Namespace, config: dict) -> dict:
     }
 
 
-def _build_llm_client(args: argparse.Namespace, config: dict) -> OpenAICompatibleClient | None:
+def _build_llm_client(args: argparse.Namespace, config: dict) -> OpenAICompatibleClient | AnthropicMessagesClient | None:
     llm_config = config.get("llm", {}) if isinstance(config.get("llm", {}), dict) else {}
     base_url = args.llm_base_url or llm_config.get("base_url")
     model = args.llm_model or llm_config.get("model")
@@ -249,21 +249,32 @@ def _build_llm_client(args: argparse.Namespace, config: dict) -> OpenAICompatibl
     temperature = (
         args.llm_temperature if args.llm_temperature is not None else float(llm_config.get("temperature", 0.0))
     )
+    provider = args.llm_provider or llm_config.get("provider", "openai")
 
     if not base_url:
         return None
-    client = OpenAICompatibleClient(
-        base_url=base_url,
-        model=model,
-        api_key=api_key,
-        timeout=timeout,
-        temperature=temperature,
-    )
+
+    if provider == "anthropic":
+        client = AnthropicMessagesClient(
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            timeout=timeout,
+            temperature=temperature,
+        )
+    else:
+        client = OpenAICompatibleClient(
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+            timeout=timeout,
+            temperature=temperature,
+        )
     try:
-        model = client.resolve_model()
+        resolved = client.resolve_model()
     except LLMClientError as exc:
-        raise SystemExit(f"Could not initialize local LLM at {base_url}: {exc}") from exc
-    print(f"# using local LLM: {base_url} model={model}")
+        raise SystemExit(f"Could not initialize LLM at {base_url}: {exc}") from exc
+    print(f"# using LLM: {base_url} model={resolved} provider={provider}")
     return client
 
 
@@ -354,6 +365,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--llm-api-key", default=None, help="Override config llm.api_key.")
     parser.add_argument("--llm-timeout", type=float, default=None, help="Override config llm.timeout.")
     parser.add_argument("--llm-temperature", type=float, default=None, help="Override config llm.temperature.")
+    parser.add_argument("--llm-provider", default=None, choices=["openai", "anthropic"], help="LLM API provider: openai (default) or anthropic.")
     parser.add_argument("--embedding-provider", default=None, help="Override config embeddings.provider: local or hashing.")
     parser.add_argument("--embedding-model-path", default=None, help="Override config embeddings.model_path.")
     parser.add_argument("--embedding-batch-size", type=int, default=None, help="Override config embeddings.batch_size.")

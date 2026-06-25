@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 
 from agentic_rag.agents import RootAgent, SufficientContextAgent, SynthesisAgent, _content_terms
-from agentic_rag.llm import LLMClientError, OpenAICompatibleClient
+from agentic_rag.llm import LLMClient, LLMClientError
 from agentic_rag.types import ContextAssessment, ContextStatus, RetrievalTask, SearchResult
 
 
 class LLMRootAgent(RootAgent):
     """Parse information needs with a local OpenAI-compatible model."""
 
-    def __init__(self, client: OpenAICompatibleClient):
+    def __init__(self, client: LLMClient):
         self.client = client
         self.fallback = RootAgent()
 
@@ -52,7 +52,7 @@ Rules:
 class LLMSufficientContextAgent(SufficientContextAgent):
     """Let the model judge whether retrieved snippets answer every task."""
 
-    def __init__(self, client: OpenAICompatibleClient):
+    def __init__(self, client: LLMClient):
         self.client = client
         self.fallback = SufficientContextAgent()
 
@@ -115,7 +115,7 @@ class LLMSufficientContextAgent(SufficientContextAgent):
 class LLMSynthesisAgent(SynthesisAgent):
     """Generate the final grounded answer with a local model."""
 
-    def __init__(self, client: OpenAICompatibleClient):
+    def __init__(self, client: LLMClient):
         self.client = client
         self.fallback = SynthesisAgent()
 
@@ -155,7 +155,7 @@ class LLMSynthesisAgent(SynthesisAgent):
             return self.fallback.synthesize(tasks, snippets, assessment)
 
 
-def build_llm_agents(client: OpenAICompatibleClient) -> dict[str, object]:
+def build_llm_agents(client: LLMClient) -> dict[str, object]:
     return {
         "root_agent": LLMRootAgent(client),
         "sufficient_context_agent": LLMSufficientContextAgent(client),
